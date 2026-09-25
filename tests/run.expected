@@ -1,0 +1,24 @@
+0 steps: ant at (0, 0) facing up; 0 black cells
+the ant has wandered over an area 1 wide and 1 high
+
+@
+11 steps: ant at (-2, 1) facing left; 7 black cells
+the ant has wandered over an area 4 wide and 3 high
+
+.##.
+..##
+@###
+200 steps: ant at (-4, 2) facing up; 40 black cells
+the ant has wandered over an area 9 wide and 9 high
+
+..####...
+.#....#..
+###....#.
+########.
+.##.#..#.
+.#...#.##
+@.###.###
+###....#.
+...####..
+11000 steps: ant at (-34, 14) facing down; 834 black cells
+the ant has wandered over an area 67 wide and 45 high

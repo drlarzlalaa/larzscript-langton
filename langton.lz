@@ -1,0 +1,154 @@
+# LarzLangton - Langton's ant, written entirely in Larzscript.
+#
+#   larzscript langton.lz run --steps=200
+#   larzscript langton.lz run --steps=11000 --brief
+#   larzscript langton.lz highway
+#
+# An ant walks on an infinite grid of white cells. On a white cell it turns
+# right, flips the cell to black and steps forward; on a black cell it turns
+# left, flips it to white and steps forward. That is all. For about 10,000
+# steps the pattern looks like chaos, and then the ant suddenly starts
+# building a diagonal "highway", repeating a 104-step cycle for ever. Nobody
+# has proved it always does so, but it does from an empty grid. `run` shows
+# the state after a number of steps (the picture, if small enough), and
+# `highway` finds where the highway begins. tools/reference.py is an
+# independent Python implementation; every output matched.
+
+import "cli" as cli
+import "args" as argmod
+
+fn fail(msg) { print("error: " + msg); exit(2) }
+
+fn number(s, what) {
+  let x = nil
+  try { x = float(s) } catch e { fail(what + " must be a number, got '" + str(s) + "'") }
+  return x
+}
+
+fn whole(s, what) {
+  let x = nil
+  try { x = int(float(s)) } catch e { fail(what + " must be a whole number, got '" + str(s) + "'") }
+  return x
+}
+
+# x with at most n significant digits, written out in full (no exponent),
+# so the output is the same on every Larzscript version.
+fn sig(x, n) {
+  if x == 0 { return "0" }
+  let a = x < 0 ? -x : x
+  let e = 0
+  while a >= 10.0 { a = a / 10.0; e = e + 1 }
+  while a < 1.0 { a = a * 10.0; e = e - 1 }
+  if round(a, n - 1) >= 10.0 { e = e + 1 }
+  let d = n - 1 - e
+  if d >= 0 { return str(round(x, d)) }
+  let scale = 1.0
+  let k = 0
+  while k < -d { scale = scale * 10.0; k = k + 1 }
+  return str(int(round(x / scale, 0) * scale))
+}
+
+
+
+# The world: a dictionary from "x,y" to true (black). Directions: 0 up, 1 right, 2 down, 3 left.
+fn key(x, y) { return str(x) + "," + str(y) }
+
+# Runs `steps` steps; returns [ant x, ant y, direction, black cells dictionary, bounding box [minx, miny, maxx, maxy]].
+fn walk(steps) {
+  let black = {}
+  let x = 0
+  let y = 0
+  let dir = 0
+  let minx = 0
+  let miny = 0
+  let maxx = 0
+  let maxy = 0
+  let s = 0
+  while s < steps {
+    let k = key(x, y)
+    if black.has(k) {
+      dir = (dir + 3) % 4
+      black.remove(k)
+    } else {
+      dir = (dir + 1) % 4
+      black[k] = true
+    }
+    if dir == 0 { y = y - 1 } else if dir == 1 { x = x + 1 } else if dir == 2 { y = y + 1 } else { x = x - 1 }
+    if x < minx { minx = x }
+    if x > maxx { maxx = x }
+    if y < miny { miny = y }
+    if y > maxy { maxy = y }
+    s = s + 1
+  }
+  return [x, y, dir, black, [minx, miny, maxx, maxy]]
+}
+
+fn cmd_run(a) {
+  let steps = whole(argmod.flag(a, "steps", "200"), "--steps")
+  let brief = argmod.flag(a, "brief", false) ? true : false
+  if steps < 0 or steps > 30000 { fail("--steps must be from 0 to 30000, got " + str(steps)) }
+  let w = walk(steps)
+  let box = w[4]
+  let width = box[2] - box[0] + 1
+  let height = box[3] - box[1] + 1
+  let names = ["up", "right", "down", "left"]
+  print(str(steps) + " steps: ant at (" + str(w[0]) + ", " + str(w[1]) + ") facing " + names[w[2]] + "; " + str(len(keys(w[3]))) + " black cells")
+  print("the ant has wandered over an area " + str(width) + " wide and " + str(height) + " high")
+  if not brief and width <= 100 and height <= 60 {
+    print("")
+    let y = box[1]
+    while y <= box[3] {
+      let line = ""
+      let x = box[0]
+      while x <= box[2] {
+        if x == w[0] and y == w[1] { line = line + "@" }
+        else { line = line + (w[3].has(key(x, y)) ? "#" : ".") }
+        x = x + 1
+      }
+      print(line)
+      y = y + 1
+    }
+  }
+}
+
+# The highway: the first step from which the ant repeats the same 104-step displacement (a diagonal shift of 2 in each
+# direction) ten times running. Returns the step number, or -1.
+fn cmd_highway(a) {
+  let black = {}
+  let x = 0
+  let y = 0
+  let dir = 0
+  let s = 0
+  let xs = []
+  let ys = []
+  let found = -1
+  let run_start = -1
+  let good = 0
+  while s < 14000 and found < 0 {
+    xs.push(x)
+    ys.push(y)
+    if s >= 104 {
+      let dx = x - xs[s - 104]
+      let dy = y - ys[s - 104]
+      if abs(dx) == 2 and abs(dy) == 2 {
+        if good == 0 { run_start = s - 104 }
+        good = good + 1
+        if good >= 1040 { found = run_start }
+      } else { good = 0 }
+    }
+    let k = key(x, y)
+    if black.has(k) { dir = (dir + 3) % 4; black.remove(k) } else { dir = (dir + 1) % 4; black[k] = true }
+    if dir == 0 { y = y - 1 } else if dir == 1 { x = x + 1 } else if dir == 2 { y = y + 1 } else { x = x - 1 }
+    s = s + 1
+  }
+  if found < 0 { print("no highway found in 14000 steps") } else {
+    print("the highway begins at step " + str(found))
+    print("from there the ant repeats a 104-step cycle, moving (" + str(xs[found + 104] - xs[found]) + ", " + str(ys[found + 104] - ys[found]) + ") each time")
+  }
+}
+
+let app = cli.new("langton", "Langton's ant, in Larzscript")
+cli.command(app, "run", "after some steps: run [--steps=200 --brief]", fn(x) { cmd_run(x) })
+cli.command(app, "highway", "where the highway starts: highway", fn(x) { cmd_highway(x) })
+
+cli.run(app, args)
